@@ -5,7 +5,7 @@ name "qbx_garages"
 author "SwisserAI"
 description "Generated with SwisserAI - https://ai.swisser.dev | Custom all-access Qbox garage system"
 repository "https://github.com/Qbox-project/qbx_garages"
-version "1.2.1"
+version "1.2.2"
 
 ox_lib 'locale'
 

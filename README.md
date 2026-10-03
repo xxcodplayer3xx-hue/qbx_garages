@@ -1,6 +1,6 @@
 # qbx_garages
 
-A custom Qbox garage control center with a sleek Nova-themed NUI. Players can view their complete vehicle collection from any compatible garage, retrieve stored vehicles, or respawn an owned vehicle that is already out in the world.
+A custom Qbox garage control center with a sleek HallowayRP-themed NUI. Players can view their complete vehicle collection from any compatible garage, retrieve stored vehicles, or respawn an owned vehicle that is already out in the world.
 
 ## Features
 
@@ -28,6 +28,6 @@ A custom Qbox garage control center with a sleek Nova-themed NUI. Players can vi
 
 ## Usage
 
-Walk to a configured garage access point and press `E` to open the Nova garage interface. Search your fleet, then select **Take out** for stored vehicles or **Respawn vehicle** for a vehicle currently out. Use the configured drop-off point to park a vehicle normally.
+Walk to a configured garage access point and press `E` to open the HallowayRP garage interface. Search your fleet, then select **Take out** for stored vehicles or **Respawn vehicle** for a vehicle currently out. Use the configured drop-off point to park a vehicle normally.
 
 The UI is defined in `html/ui.html`, `html/style.css`, and `html/script.js`. Garage locations and access rules remain in `config/server.lua`.
