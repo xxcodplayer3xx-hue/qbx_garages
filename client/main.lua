@@ -1,26 +1,5 @@
 local config = require 'config.client'
 if not config.enableClient then return end
-local VEHICLES = exports.qbx_core:GetVehiclesByName()
-
----@enum ProgressColor
-local ProgressColor = {
-    GREEN = 'green.5',
-    YELLOW = 'yellow.5',
-    RED = 'red.5'
-}
-
----@param percent number
----@return string
-local function getProgressColor(percent)
-    if percent >= 75 then
-        return ProgressColor.GREEN
-    elseif percent > 25 then
-        return ProgressColor.YELLOW
-    else
-        return ProgressColor.RED
-    end
-end
-
 local VehicleCategory = {
 	all = {
 		[0] = true, [1] = true, [2] = true, [3] = true, [4] = true, [5] = true,
@@ -65,183 +44,96 @@ end
 local function kickOutPeds(vehicle)
     for i = -1, 5, 1 do
         local seat = GetPedInVehicleSeat(vehicle, i)
-        if seat then
+        if seat ~= 0 then
             TaskLeaveVehicle(seat, vehicle, 0)
         end
     end
 end
 
-local spawnLock = false
+local nuiBusy = false
+local activeGarage = nil
 
----@param vehicleId number
----@param garageName string
----@param accessPoint integer
-local function takeOutOfGarage(vehicleId, garageName, accessPoint)
-    if spawnLock then
-        exports.qbx_core:Notify(locale('error.spawn_in_progress'), 'error')
-        return
-    end
-    spawnLock = true
-
-    local success, result = pcall(function()
-        if cache.vehicle then
-            exports.qbx_core:Notify(locale('error.in_vehicle'), 'error')
-            return
-        end
-
-        local netId = lib.callback.await('qbx_garages:server:spawnVehicle', false, vehicleId, garageName, accessPoint)
-        if not netId then return end
-
-        local veh = lib.waitFor(function()
-            if NetworkDoesEntityExistWithNetworkId(netId) then
-                return NetToVeh(netId)
-            end
-        end)
-
-        if veh == 0 then
-            exports.qbx_core:Notify(locale('error.spawn_failed'), 'error')
-            return
-        end
-
-        if config.engineOn then
-            SetVehicleEngineOn(veh, true, true, false)
-        end
-    end)
-    spawnLock = false
-    assert(success, result)
-end
-
----@param vehicle PlayerVehicle
----@param garageName string
----@param garageInfo GarageConfig
----@param accessPoint integer
-local function displayVehicleInfo(vehicle, garageName, garageInfo, accessPoint)
-    local engine = qbx.math.round(vehicle.props.engineHealth / 10)
-    local body = qbx.math.round(vehicle.props.bodyHealth / 10)
-    local engineColor = getProgressColor(engine)
-    local bodyColor = getProgressColor(body)
-    local fuelColor = getProgressColor(vehicle.props.fuelLevel)
-    local vehicleLabel = ('%s %s'):format(VEHICLES[vehicle.modelName].brand, VEHICLES[vehicle.modelName].name)
-
-    local options = {
-        {
-            title = locale('menu.information'),
-            icon = 'circle-info',
-            description = locale('menu.description', vehicleLabel, vehicle.props.plate, lib.math.groupdigits(vehicle.depotPrice)),
-            readOnly = true,
-        },
-        {
-            title = locale('menu.body'),
-            icon = 'car-side',
-            readOnly = true,
-            progress = body,
-            colorScheme = bodyColor,
-        },
-        {
-            title = locale('menu.engine'),
-            icon = 'oil-can',
-            readOnly = true,
-            progress = engine,
-            colorScheme = engineColor,
-        },
-        {
-            title = locale('menu.fuel'),
-            icon = 'gas-pump',
-            readOnly = true,
-            progress = vehicle.props.fuelLevel,
-            colorScheme = fuelColor,
-        }
-    }
-
-    if vehicle.state == VehicleState.OUT then
-        if garageInfo.type == GarageType.DEPOT then
-            options[#options + 1] = {
-                title = 'Take out',
-                icon = 'fa-truck-ramp-box',
-                description = ('$%s'):format(lib.math.groupdigits(vehicle.depotPrice)),
-                arrow = true,
-                onSelect = function()
-                    takeOutOfGarage(vehicle.id, garageName, accessPoint)
-                end,
-            }
-        else
-            options[#options + 1] = {
-                title = 'Your vehicle is already out...',
-                icon = VehicleType.CAR,
-                readOnly = true,
-            }
-        end
-    elseif vehicle.state == VehicleState.GARAGED then
-        options[#options + 1] = {
-            title = locale('menu.take_out'),
-            icon = 'car-rear',
-            arrow = true,
-            onSelect = function()
-                takeOutOfGarage(vehicle.id, garageName, accessPoint)
-            end,
-        }
-    elseif vehicle.state == VehicleState.IMPOUNDED then
-        options[#options + 1] = {
-            title = locale('menu.veh_impounded'),
-            icon = 'building-shield',
-            readOnly = true,
-        }
-    end
-
-    lib.registerContext({
-        id = 'vehicleList',
-        title = garageInfo.label,
-        menu = 'garageMenu',
-        options = options,
-    })
-
-    lib.showContext('vehicleList')
+local function closeGarageUi()
+    activeGarage = nil
+    nuiBusy = false
+    SetNuiFocus(false, false)
+    SendNUIMessage({ action = "close", data = {} })
 end
 
 ---@param garageName string
 ---@param garageInfo GarageConfig
 ---@param accessPoint integer
 local function openGarageMenu(garageName, garageInfo, accessPoint)
-    ---@type PlayerVehicle[]?
-    local vehicleEntities = lib.callback.await('qbx_garages:server:getGarageVehicles', false, garageName)
+    local vehicles = lib.callback.await("qbx_garages:server:getAllVehicles", false, garageName) or {}
 
-    if not vehicleEntities then
-        exports.qbx_core:Notify(locale('error.no_vehicles'), 'error')
+    activeGarage = {
+        name = garageName,
+        label = garageInfo.label,
+        accessPoint = accessPoint,
+    }
+    nuiBusy = false
+    SetNuiFocus(true, true)
+    SendNUIMessage({
+        action = "open",
+        data = {
+            garageName = garageName,
+            garageLabel = garageInfo.label,
+            accessPoint = accessPoint,
+            vehicles = vehicles,
+        },
+    })
+end
+
+RegisterNUICallback("close", function(_, callback)
+    closeGarageUi()
+    callback({ ok = true })
+end)
+
+RegisterNUICallback("retrieve", function(data, callback)
+    if nuiBusy or not activeGarage or type(data) ~= "table" then
+        callback({ ok = false, error = "The garage is busy. Try again in a moment." })
         return
     end
 
-    table.sort(vehicleEntities, function(a, b)
-        return a.modelName < b.modelName
-    end)
-
-    local options = {}
-    for i = 1, #vehicleEntities do
-        local vehicleEntity = vehicleEntities[i]
-        local vehicleLabel = ('%s %s'):format(VEHICLES[vehicleEntity.modelName].brand, VEHICLES[vehicleEntity.modelName].name)
-
-        options[#options + 1] = {
-            title = vehicleLabel,
-            description = vehicleEntity.props.plate,
-            arrow = true,
-            onSelect = function()
-                displayVehicleInfo(vehicleEntity, garageName, garageInfo, accessPoint)
-            end,
-        }
+    local vehicleId = tonumber(data.vehicleId)
+    if not vehicleId or vehicleId % 1 ~= 0 then
+        callback({ ok = false, error = "That vehicle selection is invalid." })
+        return
     end
 
-    lib.registerContext({
-        id = 'garageMenu',
-        title = garageInfo.label,
-        options = options,
-    })
+    if cache.vehicle then
+        callback({ ok = false, error = "Exit your current vehicle before retrieving another one." })
+        return
+    end
 
-    lib.showContext('garageMenu')
-end
+    nuiBusy = true
+    local result = lib.callback.await("qbx_garages:server:retrieveVehicle", false, vehicleId, activeGarage.name, activeGarage.accessPoint)
+    nuiBusy = false
+
+    if result and result.ok and result.netId then
+        local vehicle = lib.waitFor(function()
+            if NetworkDoesEntityExistWithNetworkId(result.netId) then
+                return NetToVeh(result.netId)
+            end
+        end)
+        if vehicle and vehicle ~= 0 and config.engineOn then
+            SetVehicleEngineOn(vehicle, true, true, false)
+        end
+    end
+
+    callback(result or { ok = false, error = "The vehicle could not be retrieved." })
+end)
+
+AddEventHandler("onResourceStop", function(resource)
+    if resource == cache.resource then
+        closeGarageUi()
+    end
+end)
 
 ---@param vehicle number
 ---@param garageName string
 local function parkVehicle(vehicle, garageName)
-    if GetVehicleNumberOfPassengers(vehicle) ~= 1 then
+    if GetVehicleNumberOfPassengers(vehicle) == 0 then
         local isParkable = lib.callback.await('qbx_garages:server:isParkable', false, garageName, NetworkGetNetworkIdFromEntity(vehicle))
 
         if not isParkable then

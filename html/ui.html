@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="tailwind.css">
+  <link rel="stylesheet" href="fonts.css">
+  <link rel="stylesheet" href="style.css">
+  <title>Garage Control</title>
+</head>
+<body class="w-screen h-screen overflow-hidden bg-transparent font-body text-white opacity-0 pointer-events-none transition-opacity duration-300">
+  <main id="app" class="flex h-full w-full items-center justify-center p-4 sm:p-8">
+    <section class="flex h-[min(760px,92vh)] w-full max-w-6xl flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-ink/95 shadow-2xl shadow-black/60 ring-1 ring-black/50 lg:flex-row">
+      <aside class="relative flex w-full shrink-0 flex-col justify-between overflow-hidden border-b border-white/10 bg-gradient-to-br from-[#111c25] via-ink to-[#151126] p-6 sm:p-8 lg:w-[21rem] lg:border-b-0 lg:border-r">
+        <div class="absolute -right-20 -top-20 h-56 w-56 rounded-full bg-cyan/10 blur-3xl"></div>
+        <div class="relative">
+          <div class="mb-8 flex items-center gap-3">
+            <div class="flex h-11 w-11 items-center justify-center rounded-2xl border border-cyan/30 bg-cyan/10 text-cyan shadow-lg shadow-cyan/10">✦</div>
+            <div>
+              <p class="font-display text-sm font-semibold tracking-[0.22em] text-white/90">NOVA</p>
+              <p class="text-[10px] uppercase tracking-[0.25em] text-white/35">Vehicle systems</p>
+            </div>
+          </div>
+          <p class="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-cyan/70">Garage network</p>
+          <h1 id="garageName" class="max-w-[12rem] font-display text-3xl font-semibold leading-tight text-white">Loading garage</h1>
+          <p class="mt-4 max-w-[15rem] text-sm leading-6 text-white/45">Every vehicle you own, available from one clean command center.</p>
+        </div>
+        <div class="relative mt-8 grid grid-cols-2 gap-3">
+          <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+            <p class="text-[10px] uppercase tracking-[0.18em] text-white/35">Fleet size</p>
+            <p id="fleetCount" class="mt-2 font-display text-2xl text-white">0</p>
+          </div>
+          <div class="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+            <p class="text-[10px] uppercase tracking-[0.18em] text-white/35">Online</p>
+            <p id="outCount" class="mt-2 font-display text-2xl text-cyan">0</p>
+          </div>
+        </div>
+      </aside>
+      <div class="flex min-h-0 flex-1 flex-col bg-[#0c1017]/95">
+        <header class="flex flex-col gap-4 border-b border-white/10 p-5 sm:p-7 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p class="text-xs uppercase tracking-[0.2em] text-white/35">Private collection</p>
+            <h2 class="mt-1 font-display text-xl text-white">Choose a vehicle</h2>
+          </div>
+          <div class="flex items-center gap-3">
+            <label class="relative block">
+              <span class="sr-only">Search vehicles</span>
+              <input id="search" type="search" placeholder="Search fleet..." class="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-cyan/50 focus:ring-1 focus:ring-cyan/20 sm:w-56">
+            </label>
+            <button id="closeButton" type="button" class="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-lg text-white/50 transition hover:border-white/25 hover:bg-white/10 hover:text-white" aria-label="Close garage">×</button>
+          </div>
+        </header>
+        <div id="notice" class="hidden mx-5 mt-5 rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-200 sm:mx-7"></div>
+        <div id="vehicleGrid" class="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-5 sm:grid-cols-2 sm:p-7 xl:grid-cols-3"></div>
+        <footer class="flex items-center justify-between border-t border-white/10 px-5 py-4 text-xs text-white/35 sm:px-7">
+          <span>ESC to close</span>
+          <span class="flex items-center gap-2"><span class="h-1.5 w-1.5 rounded-full bg-cyan shadow-[0_0_10px_#71e6df]"></span>Secure access</span>
+        </footer>
+      </div>
+    </section>
+  </main>
+  <script src="script.js"></script>
+</body>
+</html>

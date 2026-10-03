@@ -1,6 +1,19 @@
 local logger = require '@qbx_core.modules.logger'
 local spawningVehicles = {}
 
+local function getVehicleType(playerVehicle)
+    local vehicle = playerVehicle and VEHICLES[playerVehicle.modelName]
+    if not vehicle then return end
+
+    if vehicle.category == "helicopters" or vehicle.category == "planes" then
+        return VehicleType.AIR
+    elseif vehicle.category == "boats" then
+        return VehicleType.SEA
+    end
+
+    return VehicleType.CAR
+end
+
 ---@param player table
 ---@param garage GarageConfig
 ---@return boolean
@@ -24,17 +37,17 @@ local function setVehicleStateToOut(vehicleId, vehicle, modelName)
     })
 end
 
----@param player table
+---@param source number
 ---@param depotPrice integer
 ---@return string?
-local function payDepotPrice(player, depotPrice)
-    local cashBalance = player.PlayerData.money.cash
-    local bankBalance = player.PlayerData.money.bank
+local function payDepotPrice(source, depotPrice)
+    local cashBalance = exports.qbx_core:GetMoney(source, "cash") or 0
+    local bankBalance = exports.qbx_core:GetMoney(source, "bank") or 0
 
-    if cashBalance >= depotPrice then
-        return player.Functions.RemoveMoney('cash', depotPrice, 'paid-depot') and 'cash'
-    elseif bankBalance >= depotPrice then
-        return player.Functions.RemoveMoney('bank', depotPrice, 'paid-depot') and 'bank'
+    if cashBalance >= depotPrice and exports.qbx_core:RemoveMoney(source, "cash", depotPrice, "paid-depot") then
+        return "cash"
+    elseif bankBalance >= depotPrice and exports.qbx_core:RemoveMoney(source, "bank", depotPrice, "paid-depot") then
+        return "bank"
     end
 end
 
@@ -43,7 +56,7 @@ end
 ---@param garageName string
 ---@param accessPointIndex integer
 ---@return number? netId
-local function spawnVehicle(source, vehicleId, garageName, accessPointIndex)
+local function spawnVehicle(source, vehicleId, garageName, accessPointIndex, retrieveAnywhere)
     if type(vehicleId) ~= 'number' or vehicleId % 1 ~= 0 then return end
     if type(garageName) ~= 'string' then return end
     if type(accessPointIndex) ~= 'number' or accessPointIndex % 1 ~= 0 then return end
@@ -89,28 +102,40 @@ local function spawnVehicle(source, vehicleId, garageName, accessPointIndex)
     local garageType = GetGarageType(garageName)
 
     local spawnCoords = accessPoint.spawn or accessPoint.coords
-    if Config.distanceCheck then
-        local nearbyVehicle = lib.getClosestVehicle(spawnCoords.xyz, Config.distanceCheck, false)
-        if nearbyVehicle then
-            exports.qbx_core:Notify(source, locale('error.no_space'), 'error')
-            return
-        end
-    end
-
-    local filter = GetPlayerVehicleFilter(source, garageName)
+    local filter = retrieveAnywhere and {
+        citizenid = not garage.shared and player.PlayerData.citizenid or nil,
+    } or GetPlayerVehicleFilter(source, garageName)
     local playerVehicle = exports.qbx_vehicles:GetPlayerVehicle(vehicleId, filter)
     if not playerVehicle then
         exports.qbx_core:Notify(source, locale('error.not_owned'), 'error')
         return
     end
-    if type(playerVehicle.props) ~= 'table' or type(playerVehicle.props.plate) ~= 'string'
-        or type(playerVehicle.props.model) ~= 'number' then return end
+    if type(playerVehicle.props) ~= "table" or type(playerVehicle.props.plate) ~= "string"
+        or type(playerVehicle.props.model) ~= "number" then return end
 
-    if garageType == GarageType.DEPOT and FindPlateOnServer(playerVehicle.props.plate) then -- If depot, check if vehicle is not already spawned on the map
-        return exports.qbx_core:Notify(source, locale('error.not_impound'), 'error')
+    local existingVehicle = FindVehicleOnServer(playerVehicle.props.plate)
+    if garageType == GarageType.DEPOT and existingVehicle and not retrieveAnywhere then
+        return exports.qbx_core:Notify(source, locale("error.not_impound"), "error")
+    end
+    if Config.distanceCheck then
+        local nearbyVehicle = lib.getClosestVehicle(spawnCoords.xyz, Config.distanceCheck, false)
+        if nearbyVehicle and nearbyVehicle ~= existingVehicle then
+            exports.qbx_core:Notify(source, locale("error.no_space"), "error")
+            return
+        end
     end
 
-    if not GaragesHooks('spawnVehicle', {source = source, vehicleId = vehicleId, garageName = garageName}) then return end
+    if retrieveAnywhere and playerVehicle.state == VehicleState.IMPOUNDED and garageType ~= GarageType.DEPOT then
+        return exports.qbx_core:Notify(source, locale("error.not_impound"), "error")
+    end
+
+    if not GaragesHooks("spawnVehicle", { source = source, vehicleId = vehicleId, garageName = garageName }) then return end
+
+    if retrieveAnywhere and existingVehicle then
+        if GetVehicleNumberOfPassengers(existingVehicle) > 0 or GetPedInVehicleSeat(existingVehicle, -1) ~= 0 then
+            return exports.qbx_core:Notify(source, locale("error.vehicle_occupied"), "error")
+        end
+    end
 
     local paidFrom
     local depotPrice
@@ -122,7 +147,7 @@ local function spawnVehicle(source, vehicleId, garageName, accessPointIndex)
         end
 
         if depotPrice > 0 then
-            paidFrom = payDepotPrice(player, depotPrice)
+            paidFrom = payDepotPrice(source, depotPrice)
             if not paidFrom then
                 exports.qbx_core:Notify(source, locale('error.not_enough'), 'error')
                 return
@@ -142,14 +167,14 @@ local function spawnVehicle(source, vehicleId, garageName, accessPointIndex)
 
     if not success or not netId or not veh or veh == 0 or not DoesEntityExist(veh) then
         if paidFrom then
-            player.Functions.AddMoney(paidFrom, depotPrice, 'depot-spawn-refund')
+            exports.qbx_core:AddMoney(source, paidFrom, depotPrice, "depot-spawn-refund")
         end
         return
     end
 
     if not GaragesHooks('spawnedVehicle', {source = source, vehicleId = vehicleId, vehicle = veh, garageName = garageName}) then
         exports.qbx_core:DeleteVehicle(veh)
-        if paidFrom then player.Functions.AddMoney(paidFrom, depotPrice, 'depot-spawn-refund') end
+        if paidFrom then exports.qbx_core:AddMoney(source, paidFrom, depotPrice, "depot-spawn-refund") end
         return
     end
 
@@ -157,8 +182,12 @@ local function spawnVehicle(source, vehicleId, garageName, accessPointIndex)
     local saved, result = pcall(setVehicleStateToOut, vehicleId, veh, playerVehicle.modelName)
     if not saved or not result then
         exports.qbx_core:DeleteVehicle(veh)
-        if paidFrom then player.Functions.AddMoney(paidFrom, depotPrice, 'depot-spawn-refund') end
+        if paidFrom then exports.qbx_core:AddMoney(source, paidFrom, depotPrice, "depot-spawn-refund") end
         return
+    end
+
+    if retrieveAnywhere and existingVehicle then
+        exports.qbx_core:DeleteVehicle(existingVehicle)
     end
 
     if Config.doorsLocked then
@@ -185,6 +214,31 @@ lib.callback.register('qbx_garages:server:spawnVehicle', function(source, vehicl
         return
     end
     return result
+end)
+
+lib.callback.register("qbx_garages:server:retrieveVehicle", function(source, vehicleId, garageName, accessPointIndex)
+    if type(vehicleId) ~= "number" or vehicleId % 1 ~= 0 or type(garageName) ~= "string" or type(accessPointIndex) ~= "number" then
+        print(("[qbx_garages] Retrieval refused: invalid request from %s"):format(source))
+        return { ok = false, error = "The retrieval request was invalid." }
+    end
+    if spawningVehicles[vehicleId] then
+        return { ok = false, error = "That vehicle is already being retrieved." }
+    end
+
+    spawningVehicles[vehicleId] = true
+    local success, netId = pcall(spawnVehicle, source, vehicleId, garageName, accessPointIndex, true)
+    spawningVehicles[vehicleId] = nil
+    if not success then
+        lib.print.error(netId)
+        print(("[qbx_garages] Retrieval refused: server error for vehicle %s from %s"):format(vehicleId, source))
+        return { ok = false, error = "The vehicle could not be retrieved right now." }
+    end
+    if not netId then
+        print(("[qbx_garages] Retrieval refused: vehicle %s was not spawned for %s"):format(vehicleId, source))
+        return { ok = false, error = "The vehicle could not be retrieved. Check the spawn point and try again." }
+    end
+
+    return { ok = true, netId = netId }
 end)
 
 function OverrideFreeDepotPriceForOutVehicle(vehicle)

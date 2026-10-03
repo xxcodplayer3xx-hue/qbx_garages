@@ -1,10 +1,11 @@
 fx_version 'cerulean'
 game 'gta5'
 
-name 'qbx_garages'
-description 'Garage system for Qbox'
-repository 'https://github.com/Qbox-project/qbx_garages'
-version '1.1.4'
+name "qbx_garages"
+author "SwisserAI"
+description "Generated with SwisserAI - https://ai.swisser.dev | Custom all-access Qbox garage system"
+repository "https://github.com/Qbox-project/qbx_garages"
+version "1.2.1"
 
 ox_lib 'locale'
 
@@ -26,9 +27,17 @@ server_scripts {
     'server/spawn-vehicle.lua',
 }
 
+ui_page "html/ui.html"
+
 files {
-    'config/client.lua',
-    'locales/*.json',
+    "config/client.lua",
+    "locales/*.json",
+    "html/ui.html",
+    "html/style.css",
+    "html/script.js",
+    "html/tailwind.css",
+    "html/fonts/*.woff2",
+    "html/fonts.css"
 }
 
 lua54 'yes'

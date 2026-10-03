@@ -89,13 +89,21 @@ end
 
 exports('SetVehicleDepotPrice', setVehicleDepotPrice)
 
-function FindPlateOnServer(plate)
+function FindVehicleOnServer(plate)
+    if type(plate) ~= "string" then return end
+
+    local normalizedPlate = plate:match("^%s*(.-)%s*$"):upper()
     local vehicles = GetAllVehicles()
     for i = 1, #vehicles do
-        if plate == GetVehicleNumberPlateText(vehicles[i]) then
-            return true
+        local vehiclePlate = GetVehicleNumberPlateText(vehicles[i]):match("^%s*(.-)%s*$"):upper()
+        if normalizedPlate == vehiclePlate then
+            return vehicles[i]
         end
     end
+end
+
+function FindPlateOnServer(plate)
+    return FindVehicleOnServer(plate) ~= nil
 end
 
 ---@param garage string
@@ -193,6 +201,52 @@ lib.callback.register('qbx_garages:server:getGarageVehicles', function(source, g
         end
     end
     return toSend
+end)
+
+---@param source number
+---@param garageName string
+---@return table[]
+lib.callback.register("qbx_garages:server:getAllVehicles", function(source, garageName)
+    local player = exports.qbx_core:GetPlayer(source)
+    local garage = TryGetGarage(source, garageName)
+    if not player or not garage or not getCanAccessGarage(player, garage) then return {} end
+
+    local playerVehicles = exports.qbx_vehicles:GetPlayerVehicles({
+        citizenid = not garage.shared and player.PlayerData.citizenid or nil,
+    }) or {}
+    local vehicles = {}
+
+    for _, vehicle in pairs(playerVehicles) do
+        if type(vehicle.props) == "table" and type(vehicle.props.plate) == "string" and getVehicleType(vehicle) == garage.vehicleType then
+            local modelInfo = VEHICLES[vehicle.modelName] or {}
+            local existingEntity = FindVehicleOnServer(vehicle.props.plate)
+            local engineHealth = math.max(0, math.min(100, math.floor((tonumber(vehicle.props.engineHealth) or 1000) / 10)))
+            local bodyHealth = math.max(0, math.min(100, math.floor((tonumber(vehicle.props.bodyHealth) or 1000) / 10)))
+            local fuelLevel = math.max(0, math.min(100, math.floor(tonumber(vehicle.props.fuelLevel) or 0)))
+            local isImpounded = vehicle.state == VehicleState.IMPOUNDED
+
+            vehicles[#vehicles + 1] = {
+                id = vehicle.id,
+                modelName = vehicle.modelName,
+                brand = modelInfo.brand or "Unknown",
+                name = modelInfo.name or vehicle.modelName,
+                plate = vehicle.props.plate,
+                garage = vehicle.garage or "Unknown",
+                status = existingEntity and "out" or vehicle.state == VehicleState.OUT and "out" or isImpounded and "impounded" or "stored",
+                engine = engineHealth,
+                body = bodyHealth,
+                fuel = fuelLevel,
+                depotPrice = tonumber(vehicle.depotPrice) or 0,
+                canRetrieve = not isImpounded or garage.type == GarageType.DEPOT,
+            }
+        end
+    end
+
+    table.sort(vehicles, function(first, second)
+        return (first.name or first.modelName) < (second.name or second.modelName)
+    end)
+
+    return vehicles
 end)
 
 ---@param source number
